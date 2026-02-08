@@ -62,9 +62,8 @@ async function getSupabaseUserId(firebaseUid, userData = {}) {
           dsa_hard_solved: 0,
           current_streak: 0,
           max_streak: 0,
-          ai_skill_score: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          ai_skill_score: 0
+          // created_at and updated_at use DEFAULT NOW() from schema
         });
       
       if (statsError) {
