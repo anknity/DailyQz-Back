@@ -17,7 +17,7 @@ const typingTestRoutes = require('./routes/typingTestRoutes')
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler')
 
 const app = express()
-const PORT = process.env.PORT || 5000
+const PORT = parseInt(process.env.PORT, 10) || 5000
 
 // Middleware
 app.use(helmet()) // Security headers
@@ -27,6 +27,8 @@ app.use(cors({
     'http://localhost:3001',
     'http://localhost:5173',
     'https://dailyqz.vercel.app',
+    'https://daily-qz.vercel.app',
+    'https://dailyqz-back.onrender.com',
     process.env.FRONTEND_URL
   ].filter(Boolean),
   credentials: true,
@@ -86,7 +88,7 @@ app.use(notFoundHandler)
 app.use(errorHandler)
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔════════════════════════════════════════════╗
 ║                                            ║
