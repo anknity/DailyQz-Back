@@ -61,6 +61,14 @@ app.get('/health', (req, res) => {
   })
 })
 
+// Auto-prefix /api for requests missing it (handles flexible frontend API_URL config)
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api') && req.path !== '/' && req.path !== '/health') {
+    req.url = '/api' + req.url
+  }
+  next()
+})
+
 // API Routes (v1 - Firebase)
 app.use('/api/users', userRoutes)
 app.use('/api/questions', questionRoutes)
