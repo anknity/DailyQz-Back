@@ -104,7 +104,7 @@ const generateQuestions = async (category, subcategory = 'general', difficulty =
       hard: 'Advanced questions that test deep understanding, edge cases, and complex scenarios. Include tricky options that require careful analysis.'
     }
 
-    const prompt = `Generate ${count} multiple choice questions (MCQs) about ${topicDescription}.
+    const prompt = `Generate ${count} multiple choice questions (MCQs) STRICTLY about ${topicDescription}.
 
 Difficulty level: ${difficulty.toUpperCase()}
 Guidelines: ${difficultyGuidelines[difficulty] || difficultyGuidelines.medium}
@@ -120,15 +120,17 @@ Each question object must have this exact structure:
   "explanation": "Brief explanation of why the answer is correct"
 }
 
-Rules:
+STRICT RULES:
 1. Each question must have exactly 4 options
 2. correctAnswer is the index (0-3) of the correct option
-3. Make options plausible and educational
-4. Avoid trivial or obvious questions
-5. Questions should be unique and not repetitive
-6. Ensure technical accuracy
+3. Every question MUST be strictly about "${topicDescription}" — do NOT generate questions about other subjects or topics
+4. Each question must be completely unique and different from every other question in this set
+5. Do NOT repeat similar question patterns or rephrase the same concept
+6. Cover diverse aspects and subtopics within "${topicDescription}"
+7. Make options plausible and educational
+8. Ensure technical accuracy
 
-Generate the JSON array now:`
+Generate ${count} unique questions about ${topicDescription} ONLY. Return the JSON array now:`
 
     const result = await model.generateContent(prompt)
     const response = await result.response

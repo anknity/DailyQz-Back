@@ -260,11 +260,17 @@ const generateQuestions = async ({ category, subject, difficulty = 'medium', cou
 
     const systemPrompt = `You are an expert exam question generator. Generate high-quality multiple choice questions (MCQs) for educational assessments. Each question must have exactly 4 options with only one correct answer.`;
 
-    const userPrompt = `Generate ${count} MCQ questions for ${categoryConfig.base}.
+    const topicName = subject || categoryConfig.base;
+    const userPrompt = `Generate ${count} MCQ questions STRICTLY about ${topicName}.
 ${subject ? `Subject/Topic: ${subject}` : ''}
 ${prompt ? `Additional context: ${prompt}` : ''}
 
 Difficulty: ${difficultyGuidelines[difficulty] || difficultyGuidelines.medium}
+
+STRICT RULES:
+- Every question MUST be about "${topicName}" ONLY — do NOT generate questions about other subjects or topics
+- Each question must be completely unique — do NOT repeat similar questions or rephrase the same concept
+- Cover diverse subtopics within "${topicName}"
 
 IMPORTANT: Return ONLY a valid JSON array with no additional text or explanation. Each object must have this exact structure:
 {
@@ -277,7 +283,7 @@ IMPORTANT: Return ONLY a valid JSON array with no additional text or explanation
 
 The correctAnswer is the 0-based index of the correct option (0, 1, 2, or 3).
 
-Generate diverse questions covering different aspects of the topic. Ensure questions are clear, unambiguous, and educationally valuable.`;
+Generate ${count} diverse, unique questions covering different aspects of ${topicName}. Ensure questions are clear, unambiguous, and educationally valuable.`;
 
     const completion = await groq.chat.completions.create({
       messages: [

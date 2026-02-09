@@ -158,17 +158,21 @@ async function generateQuestions(config) {
     hard: 'Complex problems, multiple concepts combined, requires deep thinking'
   };
 
+  const topicName = subcategory || 'General';
   const prompt = `Generate ${count} high-quality MCQ questions for competitive exams.
 
-Topic: ${category} - ${subcategory || 'General'}
+Topic: ${category} - ${topicName}
 Difficulty: ${difficulty} - ${difficultyGuidelines[difficulty]}
 
-Requirements:
+STRICT RULES:
 1. Each question must have exactly 4 options
-2. Questions should be unique and exam-worthy
-3. Include clear explanation for each answer
-4. Questions should test real understanding, not just memorization
-5. Ensure mathematical accuracy for quantitative questions
+2. Every question MUST be strictly about "${topicName}" within "${category}" — do NOT generate questions about other subjects or topics
+3. Each question must be completely unique and different from every other question in this set
+4. Do NOT repeat similar question patterns or rephrase the same concept
+5. Include clear explanation for each answer
+6. Questions should test real understanding, not just memorization
+7. Ensure mathematical accuracy for quantitative questions
+8. Cover diverse aspects and subtopics within "${topicName}"
 
 Return ONLY a valid JSON array:
 [
@@ -180,7 +184,7 @@ Return ONLY a valid JSON array:
   }
 ]
 
-Generate exactly ${count} questions. Return ONLY the JSON array.`;
+Generate exactly ${count} unique questions about ${topicName} ONLY. Return ONLY the JSON array.`;
 
   try {
     const response = await chat([
