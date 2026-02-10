@@ -234,6 +234,38 @@ const CATEGORY_PROMPTS = {
     base: 'Computer Networking',
     type: 'technical',
     subjects: ['OSI Model', 'TCP/IP', 'HTTP/HTTPS', 'DNS', 'Firewalls', 'Network Security']
+  },
+  
+  // NIMSET Exam Categories
+  'nimset': {
+    base: 'NIMSET (NIM Science & Engineering Test)',
+    type: 'competitive',
+    subjects: ['Mathematics', 'Physics', 'Chemistry', 'Biology', 'General Aptitude', 'Logical Reasoning', 'English']
+  },
+  'nimset-math': {
+    base: 'NIMSET Mathematics',
+    type: 'competitive',
+    subjects: ['Algebra', 'Calculus', 'Trigonometry', 'Statistics', 'Coordinate Geometry', 'Probability']
+  },
+  'nimset-physics': {
+    base: 'NIMSET Physics',
+    type: 'competitive',
+    subjects: ['Mechanics', 'Thermodynamics', 'Optics', 'Electricity & Magnetism', 'Modern Physics', 'Waves & Oscillations']
+  },
+  'nimset-chemistry': {
+    base: 'NIMSET Chemistry',
+    type: 'competitive',
+    subjects: ['Organic Chemistry', 'Inorganic Chemistry', 'Physical Chemistry', 'Analytical Chemistry', 'Biochemistry']
+  },
+  'nimset-biology': {
+    base: 'NIMSET Biology',
+    type: 'competitive',
+    subjects: ['Botany', 'Zoology', 'Genetics', 'Ecology', 'Cell Biology', 'Human Physiology']
+  },
+  'nimset-aptitude': {
+    base: 'NIMSET General Aptitude & Reasoning',
+    type: 'competitive',
+    subjects: ['Quantitative Aptitude', 'Logical Reasoning', 'Verbal Ability', 'Data Interpretation']
   }
 };
 

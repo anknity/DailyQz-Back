@@ -277,18 +277,45 @@ router.get('/questions/random', async (req, res, next) => {
     }
 
     // 2. Fetch from Firestore if we need more questions
+    // Use smart category matching: 'nimcet-math' → also try base 'nimcet'
     if (allQuestions.length < requestedCount) {
       try {
+        const categoryParts = category ? category.split('-') : [];
+        const baseCategory = categoryParts.length > 1 ? categoryParts[0] : category;
+
         let firestoreQuery = db.collection('questions');
         if (category) {
-          firestoreQuery = firestoreQuery.where('category', '==', category);
+          // Try base category for compound categories (e.g., 'nimcet-math' → query 'nimcet')
+          firestoreQuery = firestoreQuery.where('category', '==', baseCategory);
         }
-        const firestoreSnapshot = await firestoreQuery.limit(requestedCount).get();
+        const firestoreSnapshot = await firestoreQuery.limit(requestedCount * 2).get();
         
         firestoreSnapshot.docs.forEach(doc => {
           const data = doc.data();
-          // Check if subject matches (case insensitive)
-          if (!subject || (data.subcategory && data.subcategory.toLowerCase().includes(subject.toLowerCase()))) {
+          const subcat = (data.subcategory || '').toLowerCase();
+          const searchSubject = (subject || '').toLowerCase();
+          const catPrefix = (category || '').toLowerCase();
+
+          // Smart subject matching: check literal match, category prefix, or word-prefix overlap
+          let subjectMatch = !subject; // no subject filter = match all
+          if (!subjectMatch && subcat.includes(searchSubject)) subjectMatch = true;
+          if (!subjectMatch && catPrefix.includes('-') && subcat.startsWith(catPrefix)) subjectMatch = true;
+          if (!subjectMatch && searchSubject) {
+            const searchWords = searchSubject.split(/[\s&,]+/).filter(w => w.length >= 3);
+            const dbWords = subcat.split(/[-\s]+/).filter(w => w.length >= 3);
+            for (const sw of searchWords) {
+              for (const dw of dbWords) {
+                const minLen = Math.min(4, Math.min(sw.length, dw.length));
+                if (sw.substring(0, minLen) === dw.substring(0, minLen)) {
+                  subjectMatch = true;
+                  break;
+                }
+              }
+              if (subjectMatch) break;
+            }
+          }
+
+          if (subjectMatch) {
             allQuestions.push({
               id: doc.id,
               question: data.question,
@@ -308,10 +335,35 @@ router.get('/questions/random', async (req, res, next) => {
 
     // 3. Fetch from file if still need more questions
     if (allQuestions.length < requestedCount) {
+      // Smart category+subject matching for file-based questions
+      const categoryParts = category ? category.split('-') : [];
+      const baseCategory = categoryParts.length > 1 ? categoryParts[0] : category;
+      const normalizedSubject = (subject || '').toLowerCase();
+      const catPrefix = (category || '').toLowerCase();
+
       const fileQuestions = questionsFromFile
         .filter(q => {
-          if (category && q.category !== category) return false;
-          if (subject && q.subcategory && !q.subcategory.toLowerCase().includes(subject.toLowerCase())) return false;
+          // Smart category matching
+          if (category) {
+            const qCat = (q.category || '').toLowerCase();
+            if (qCat !== catPrefix && qCat !== baseCategory) return false;
+          }
+          // Smart subject matching
+          if (subject && q.subcategory) {
+            const subcat = q.subcategory.toLowerCase();
+            if (subcat.includes(normalizedSubject)) return true;
+            if (catPrefix.includes('-') && subcat.startsWith(catPrefix)) return true;
+            // Word-prefix matching
+            const searchWords = normalizedSubject.split(/[\s&,]+/).filter(w => w.length >= 3);
+            const dbWords = subcat.split(/[-\s]+/).filter(w => w.length >= 3);
+            for (const sw of searchWords) {
+              for (const dw of dbWords) {
+                const minLen = Math.min(4, Math.min(sw.length, dw.length));
+                if (sw.substring(0, minLen) === dw.substring(0, minLen)) return true;
+              }
+            }
+            return false;
+          }
           return true;
         })
         .slice(0, requestedCount - allQuestions.length)

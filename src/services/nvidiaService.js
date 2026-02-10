@@ -81,20 +81,36 @@ async function chat(messages, model = 'meta/llama-3.1-70b-instruct') {
  * @returns {Promise<Object>} Parsed question object
  */
 async function parseQuestion(rawText) {
-  const prompt = `Parse this raw question text into a structured MCQ format.
+  const prompt = `Parse this raw MCQ question text into structured JSON format.
 
 Raw text:
+---
 ${rawText}
+---
 
-Return ONLY a valid JSON object:
+PARSING INSTRUCTIONS:
+1. Extract the QUESTION TEXT - remove leading numbers like "1.", "Q1."
+2. Extract exactly 4 OPTIONS (A, B, C, D)
+3. Find the CORRECT ANSWER - look for "Answer: A", "Ans: B", etc.
+4. Extract any EXPLANATION text
+5. Suggest category based on content
+
+Return ONLY valid JSON:
 {
-  "question": "The question text",
+  "question": "Question text without number",
   "options": ["Option A", "Option B", "Option C", "Option D"],
   "correctAnswer": 0,
-  "explanation": "Explanation for the correct answer",
+  "explanation": "Explanation if available",
   "category": "suggested-category",
   "difficulty": "easy|medium|hard"
-}`;
+}
+
+RULES:
+- correctAnswer = 0-3 (A=0, B=1, C=2, D=3), or -1 if unknown
+- Remove option labels from option text
+- Categories: quantitative-aptitude, logical-reasoning, computer-science, physics, chemistry, biology, mathematics
+
+Return ONLY JSON, no markdown.`;
 
   try {
     const response = await chat([

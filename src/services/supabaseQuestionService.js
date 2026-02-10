@@ -221,6 +221,8 @@ class SupabaseQuestionService {
 
   /**
    * Get random questions from bank for exam creation
+   * Smart matching: handles compound categories (e.g., 'nimcet-math') and
+   * flexible subject matching (e.g., 'mathematics' matches 'nimcet-math-calculus')
    * @param {Object} criteria - Selection criteria
    * @returns {Promise<Array>} Random questions
    */
@@ -240,25 +242,88 @@ class SupabaseQuestionService {
     if (onlyApproved) {
       query = query.eq('is_approved', true);
     }
-    if (subject) {
-      query = query.ilike('subject', `%${subject}%`);
-    }
-    if (category) {
-      query = query.eq('category', category);
-    }
     if (difficulty) {
       query = query.eq('difficulty', difficulty);
+    }
+
+    // Smart category matching
+    // Frontend sends category like 'nimcet-math' but DB stores category as 'nimcet'
+    // So for compound categories, try both exact match AND base category
+    if (category) {
+      const parts = category.split('-');
+      if (parts.length > 1) {
+        // Compound category: 'nimcet-math' → try exact 'nimcet-math' OR base 'nimcet'
+        query = query.or(`category.eq.${category},category.eq.${parts[0]}`);
+      } else {
+        query = query.eq('category', category);
+      }
     }
 
     const { data, error } = await query;
     if (error) throw error;
 
     if (!data || data.length === 0) {
+      console.log(`[QuestionService] No questions found for category='${category}'`);
       return [];
     }
 
+    // Smart subject filtering in JavaScript for flexible matching
+    // This handles mismatches like:
+    //   subject='calculus' matching DB 'nimcet-math-calculus'
+    //   subject='mathematics' matching DB 'nimcet-math-*' (word-prefix match)
+    //   category='nimcet-math' matching DB subjects starting with 'nimcet-math'
+    let filtered = data;
+
+    if (subject || (category && category.includes('-'))) {
+      const normalizedSubject = subject ? subject.toLowerCase().trim() : '';
+      const categoryPrefix = category ? category.toLowerCase().trim() : '';
+
+      filtered = data.filter(q => {
+        const dbSubject = (q.subject || '').toLowerCase();
+
+        // Strategy 1: DB subject contains the search subject literally
+        // e.g., 'nimcet-math-calculus' contains 'calculus'
+        if (normalizedSubject && dbSubject.includes(normalizedSubject)) return true;
+
+        // Strategy 2: For compound categories (e.g., 'nimcet-math'),
+        // match subjects that start with the category prefix
+        // e.g., 'nimcet-math-calculus' starts with 'nimcet-math'
+        if (categoryPrefix.includes('-') && dbSubject.startsWith(categoryPrefix)) return true;
+
+        // Strategy 3: Word-prefix matching for abbreviation handling
+        // e.g., subject='mathematics' → word 'mathematics' prefix-matches 'math'
+        //        in DB subject 'nimcet-math-calculus'
+        // e.g., subject='analytical reasoning' → word 'reasoning' prefix-matches
+        //        'reasoning' in DB subject 'nimcet-reasoning-puzzles'
+        if (normalizedSubject) {
+          const searchWords = normalizedSubject.split(/[\s&,]+/).filter(w => w.length >= 3);
+          const dbWords = dbSubject.split(/[-\s]+/).filter(w => w.length >= 3);
+
+          for (const sw of searchWords) {
+            for (const dw of dbWords) {
+              const minLen = Math.min(4, Math.min(sw.length, dw.length));
+              if (sw.substring(0, minLen) === dw.substring(0, minLen)) {
+                return true;
+              }
+            }
+          }
+        }
+
+        return false;
+      });
+
+      // Fallback: if no subject match found, return from broader category
+      // so users still get questions even with naming mismatches
+      if (filtered.length === 0) {
+        console.log(`[QuestionService] No subject match for '${subject}' in category '${category}', using all ${data.length} category questions as fallback`);
+        filtered = data;
+      } else {
+        console.log(`[QuestionService] Matched ${filtered.length} questions for category='${category}' subject='${subject}'`);
+      }
+    }
+
     // Shuffle and pick random questions
-    const shuffled = data.sort(() => 0.5 - Math.random());
+    const shuffled = filtered.sort(() => 0.5 - Math.random());
     const selected = shuffled.slice(0, count);
 
     // Parse options

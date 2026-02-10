@@ -451,27 +451,42 @@ async function chat(messages, model = 'deepseek/deepseek-r1-0528:free') {
  * @returns {Promise<Object>} Parsed question object
  */
 async function parseQuestion(rawText) {
-  const prompt = `You are a question parser. Parse the following raw question text into a structured JSON format.
+  const prompt = `You are an expert MCQ question parser. Parse the following raw question text into a structured JSON format.
 
-Raw Question:
+Raw Question Text:
+---
 ${rawText}
+---
 
-Return ONLY a valid JSON object with this structure:
+PARSING INSTRUCTIONS:
+1. Extract the QUESTION TEXT - remove any leading numbers like "1.", "Q1.", etc.
+2. Extract exactly 4 OPTIONS labeled A, B, C, D (may appear as (A), A), A., etc.)
+3. Find the CORRECT ANSWER - look for patterns like:
+   - "Answer: A", "Ans: B", "Correct: C", "Answer is D"
+   - "(A) ✓", "Option A is correct"
+   - Sometimes answer appears at the end after all options
+4. Extract any EXPLANATION or solution text
+5. Suggest the most appropriate category based on content
+
+Return ONLY a valid JSON object with this exact structure:
 {
-  "question": "The complete question text",
-  "options": ["Option A", "Option B", "Option C", "Option D"],
-  "correctAnswer": 0, // Index of correct option (0-3)
-  "explanation": "Explanation of the answer",
+  "question": "The complete question text without the question number",
+  "options": ["Option A text", "Option B text", "Option C text", "Option D text"],
+  "correctAnswer": 0,
+  "explanation": "Explanation text if available, empty string otherwise",
   "suggestedCategory": "category-slug",
   "suggestedSubcategory": "subcategory-slug",
   "difficulty": "easy|medium|hard"
 }
 
-Categories available: quantitative-aptitude, logical-reasoning, verbal-ability, general-knowledge
-Analyze the question content to suggest the most appropriate category and subcategory.
-If options are labeled A, B, C, D - convert correctAnswer letter to index (A=0, B=1, C=2, D=3).
+CRITICAL RULES:
+- correctAnswer MUST be a number 0-3 (A=0, B=1, C=2, D=3)
+- If you cannot determine the correct answer, set correctAnswer to -1
+- Remove option labels (A, B, C, D) from the option text itself
+- Clean up any source URLs or watermarks from options
+- Categories: quantitative-aptitude, logical-reasoning, verbal-ability, general-knowledge, computer-science, physics, chemistry, biology, mathematics
 
-Return ONLY the JSON object, no additional text.`;
+Return ONLY the JSON object, no markdown, no explanation.`;
 
   try {
     const response = await chat([
