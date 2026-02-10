@@ -401,6 +401,33 @@ CREATE INDEX IF NOT EXISTS idx_school_exams_class ON school_exams(class_level);
 CREATE INDEX IF NOT EXISTS idx_school_exams_subject ON school_exams(subject);
 
 -- ============================================================
+-- 16b. SCHOOL_EXAM_RESULTS TABLE
+-- Stores school/college test results for leaderboard
+-- ============================================================
+CREATE TABLE IF NOT EXISTS school_exam_results (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    firebase_uid VARCHAR(128) NOT NULL,
+    display_name VARCHAR(255),
+    photo_url TEXT,
+    class_level VARCHAR(20) NOT NULL,
+    stream VARCHAR(50),
+    subject VARCHAR(100) NOT NULL,
+    score DECIMAL(5,2) NOT NULL,
+    total_questions INTEGER NOT NULL,
+    correct_answers INTEGER NOT NULL,
+    wrong_answers INTEGER NOT NULL,
+    unanswered INTEGER DEFAULT 0,
+    time_taken_seconds INTEGER,
+    test_title VARCHAR(255),
+    submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_school_results_firebase_uid ON school_exam_results(firebase_uid);
+CREATE INDEX IF NOT EXISTS idx_school_results_class ON school_exam_results(class_level);
+CREATE INDEX IF NOT EXISTS idx_school_results_subject ON school_exam_results(subject);
+CREATE INDEX IF NOT EXISTS idx_school_results_score ON school_exam_results(score DESC);
+
+-- ============================================================
 -- 17. NOTIFICATIONS TABLE
 -- User notifications for exams, results, etc.
 -- ============================================================
@@ -496,6 +523,7 @@ ALTER TABLE proctoring_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_challenges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_daily_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE school_exams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE school_exam_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE achievements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_achievements ENABLE ROW LEVEL SECURITY;
@@ -553,6 +581,10 @@ CREATE POLICY "Service role full access achievements" ON achievements FOR ALL US
 -- Scheduled Exams
 CREATE POLICY "Active scheduled exams are public" ON scheduled_exams FOR SELECT USING (is_active = true OR auth.role() = 'service_role');
 CREATE POLICY "Service role full access scheduled_exams" ON scheduled_exams FOR ALL USING (auth.role() = 'service_role');
+
+-- School Exam Results
+CREATE POLICY "School results are public for leaderboard" ON school_exam_results FOR SELECT USING (true);
+CREATE POLICY "Service role full access school_results" ON school_exam_results FOR ALL USING (auth.role() = 'service_role');
 
 -- Scheduled Exam Registrations
 CREATE POLICY "Users can view own registrations" ON scheduled_exam_registrations FOR SELECT USING (user_id IN (SELECT id FROM users WHERE firebase_uid = auth.uid()::text) OR auth.role() = 'service_role');
