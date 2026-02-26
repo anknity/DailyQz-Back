@@ -25,22 +25,35 @@ const PORT = parseInt(process.env.PORT, 10) || 5000
 
 // Middleware
 app.use(helmet()) // Security headers
-const corsOrigins = [
+
+const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
   'https://dailyqz.vercel.app',
   'https://daily-qz.vercel.app',
-  'https://dailyqz-back.onrender.com',
-  process.env.FRONTEND_URL
+  process.env.FRONTEND_URL,
 ].filter(Boolean)
 
-app.use(cors({
-  origin: corsOrigins,
+// Origin resolver — accepts explicit list + any *.vercel.app preview deployment
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true // allow server-to-server / curl
+  if (ALLOWED_ORIGINS.includes(origin)) return true
+  if (/^https:\/\/[\w-]+-[\w-]+\.vercel\.app$/.test(origin)) return true // Vercel preview URLs
+  return false
+}
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (isAllowedOrigin(origin)) callback(null, true)
+    else callback(new Error(`CORS: origin ${origin} not allowed`))
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}))
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}
+
+app.use(cors(corsOptions))
 app.use(morgan('dev')) // Logging
 app.use(express.json({ limit: '10mb' })) // Parse JSON bodies with increased limit for file uploads
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
@@ -106,12 +119,17 @@ app.use(errorHandler)
 const server = http.createServer(app)
 const io = new Server(server, {
   cors: {
-    origin: corsOrigins,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) callback(null, true)
+      else callback(new Error(`Socket CORS: origin ${origin} not allowed`))
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },
+  allowEIO3: true,           // support older Socket.io v3 clients
   pingTimeout: 60000,
   pingInterval: 25000,
+  transports: ['polling', 'websocket'], // polling first so Render proxy handshake succeeds
 })
 
 // Initialize Socket.io handlers
