@@ -2,6 +2,8 @@ const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
 const morgan = require('morgan')
+const http = require('http')
+const { Server } = require('socket.io')
 require('dotenv').config()
 
 const { userRoutes, questionRoutes, leaderboardRoutes, adminRoutes, examRoutes, generateRoutes, dsaRoutes, competitiveRoutes } = require('./routes')
@@ -14,6 +16,8 @@ const achievementRoutes = require('./routes/achievementRoutes')
 const scheduledExamRoutes = require('./routes/scheduledExamRoutes')
 const schoolExamRoutes = require('./routes/schoolExamRoutes')
 const typingTestRoutes = require('./routes/typingTestRoutes')
+const interviewRoutes = require('./routes/interviewRoutes')
+const { initSocketHandlers } = require('./socket/socketHandler')
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler')
 
 const app = express()
@@ -21,16 +25,18 @@ const PORT = parseInt(process.env.PORT, 10) || 5000
 
 // Middleware
 app.use(helmet()) // Security headers
+const corsOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+  'https://dailyqz.vercel.app',
+  'https://daily-qz.vercel.app',
+  'https://dailyqz-back.onrender.com',
+  process.env.FRONTEND_URL
+].filter(Boolean)
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:5173',
-    'https://dailyqz.vercel.app',
-    'https://daily-qz.vercel.app',
-    'https://dailyqz-back.onrender.com',
-    process.env.FRONTEND_URL
-  ].filter(Boolean),
+  origin: corsOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -90,17 +96,37 @@ app.use('/api/v2/achievements', achievementRoutes)
 app.use('/api/v2/scheduled-exams', scheduledExamRoutes)
 app.use('/api/v2/school-exams', schoolExamRoutes)
 app.use('/api/v2/typing', typingTestRoutes)
+app.use('/api/v2/interview', interviewRoutes)
 
 // Error Handling
 app.use(notFoundHandler)
 app.use(errorHandler)
 
+// Create HTTP server and attach Socket.io
+const server = http.createServer(app)
+const io = new Server(server, {
+  cors: {
+    origin: corsOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+})
+
+// Initialize Socket.io handlers
+initSocketHandlers(io)
+
+// Make io accessible to routes (for sending notifications from REST endpoints)
+app.set('io', io)
+
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔════════════════════════════════════════════╗
 ║                                            ║
 ║    🚀 DailyQ API Server Running!          ║
+║    🔌 Socket.io Enabled!                  ║
 ║                                            ║
 ║    Port: ${PORT}                            ║
 ║    Environment: ${process.env.NODE_ENV || 'development'}            ║
