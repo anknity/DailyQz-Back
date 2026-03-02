@@ -21,6 +21,18 @@ function initSocketHandlers(io) {
       socket.userId = userId;
       socket.displayName = displayName;
       socket.photoUrl = photoUrl;
+
+      // Register userId→socketId mapping. If same user already has another active socket, force-disconnect it.
+      const oldSocketId = roomManager.registerUser(userId, socket.id);
+      if (oldSocketId) {
+        const oldSocket = io.sockets.sockets.get(oldSocketId);
+        if (oldSocket) {
+          console.log(`⚠️ Duplicate session for ${displayName} — disconnecting old socket ${oldSocketId}`);
+          oldSocket.emit('force-disconnect', { reason: 'You joined from another tab/device' });
+          oldSocket.disconnect(true);
+        }
+      }
+
       console.log(`✅ Authenticated: ${displayName} (${userId})`);
       socket.emit('authenticated', { success: true });
     });
@@ -39,7 +51,7 @@ function initSocketHandlers(io) {
         title,
       });
 
-      // Auto-join the creator
+      // Auto-join the creator (host bypasses waiting room)
       const joinResult = roomManager.joinRoom(room.id, {
         userId: user.userId,
         displayName: user.displayName,
@@ -61,12 +73,12 @@ function initSocketHandlers(io) {
       callback?.({ room: joinResult.room, participant: joinResult.participant });
     });
 
-    // Join an existing room
+    // Join an existing room (goes through waiting room for non-hosts)
     socket.on('join-room', ({ roomId }, callback) => {
       const user = socketUserMap.get(socket.id);
       if (!user) return callback?.({ error: 'Not authenticated' });
 
-      const result = roomManager.joinRoom(roomId, {
+      const result = roomManager.requestJoin(roomId, {
         userId: user.userId,
         displayName: user.displayName,
         photoUrl: user.photoUrl,
@@ -75,6 +87,26 @@ function initSocketHandlers(io) {
 
       if (result.error) return callback?.({ error: result.error });
 
+      // User is in waiting room
+      if (result.waiting) {
+        // Join the socket room so they can receive admit/reject events
+        socket.join(roomId);
+
+        // Notify host about new waiting user
+        const room = roomManager.getRoom(roomId);
+        if (room) {
+          // Send to all participants (host will see it)
+          socket.to(roomId).emit('waiting-room-updated', {
+            waitingRoom: room.waitingRoom,
+            roomId,
+          });
+        }
+
+        callback?.({ waiting: true, position: result.position });
+        return;
+      }
+
+      // User was admitted (host or reconnection)
       socket.join(roomId);
 
       // Notify other participants
@@ -83,7 +115,6 @@ function initSocketHandlers(io) {
         roomId,
       });
 
-      // Notify room about participant joined
       socket.to(roomId).emit('participant-joined', {
         displayName: user.displayName,
         photoUrl: user.photoUrl,
@@ -91,7 +122,108 @@ function initSocketHandlers(io) {
       });
 
       console.log(`👋 ${user.displayName} joined room ${roomId}${result.reconnected ? ' (reconnected)' : ''}`);
-      callback?.({ room: result.room, participant: result.participant });
+      callback?.({ room: result.room, participant: result.participant, admitted: true });
+    });
+
+    // ─────────────── ADMIT / REJECT (Host actions) ───────────────
+
+    socket.on('admit-user', ({ roomId, targetSocketId }, callback) => {
+      const user = socketUserMap.get(socket.id);
+      if (!user) return callback?.({ error: 'Not authenticated' });
+
+      const result = roomManager.admitUser(roomId, targetSocketId, user.userId);
+      if (result.error) return callback?.({ error: result.error });
+
+      // Notify the admitted user
+      io.to(targetSocketId).emit('admitted', {
+        room: result.room,
+        participant: result.participant,
+        roomId,
+      });
+
+      // Notify all participants about the new user
+      socket.to(roomId).emit('user-joined', {
+        participant: result.participant,
+        roomId,
+      });
+
+      socket.to(roomId).emit('participant-joined', {
+        displayName: result.participant.displayName,
+        photoUrl: result.participant.photoUrl,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Update waiting room for host
+      const room = roomManager.getRoom(roomId);
+      io.to(roomId).emit('waiting-room-updated', {
+        waitingRoom: room?.waitingRoom || [],
+        roomId,
+      });
+
+      console.log(`✅ ${user.displayName} admitted ${result.participant.displayName} to room ${roomId}`);
+      callback?.({ success: true, participant: result.participant });
+    });
+
+    socket.on('reject-user', ({ roomId, targetSocketId }, callback) => {
+      const user = socketUserMap.get(socket.id);
+      if (!user) return callback?.({ error: 'Not authenticated' });
+
+      const result = roomManager.rejectUser(roomId, targetSocketId, user.userId);
+      if (result.error) return callback?.({ error: result.error });
+
+      // Notify the rejected user
+      io.to(targetSocketId).emit('rejected', {
+        roomId,
+        reason: 'Host denied your request to join',
+      });
+
+      // Update waiting room for host
+      const room = roomManager.getRoom(roomId);
+      io.to(roomId).emit('waiting-room-updated', {
+        waitingRoom: room?.waitingRoom || [],
+        roomId,
+      });
+
+      console.log(`❌ ${user.displayName} rejected ${result.rejected.displayName} from room ${roomId}`);
+      callback?.({ success: true });
+    });
+
+    // Admit all waiting users at once
+    socket.on('admit-all', ({ roomId }, callback) => {
+      const user = socketUserMap.get(socket.id);
+      if (!user) return callback?.({ error: 'Not authenticated' });
+
+      const waiting = roomManager.getWaitingRoom(roomId);
+      const admitted = [];
+
+      for (const w of waiting) {
+        const result = roomManager.admitUser(roomId, w.socketId, user.userId);
+        if (!result.error) {
+          io.to(w.socketId).emit('admitted', {
+            room: result.room,
+            participant: result.participant,
+            roomId,
+          });
+          socket.to(roomId).emit('user-joined', {
+            participant: result.participant,
+            roomId,
+          });
+          socket.to(roomId).emit('participant-joined', {
+            displayName: result.participant.displayName,
+            photoUrl: result.participant.photoUrl,
+            timestamp: new Date().toISOString(),
+          });
+          admitted.push(result.participant);
+        }
+      }
+
+      const room = roomManager.getRoom(roomId);
+      io.to(roomId).emit('waiting-room-updated', {
+        waitingRoom: room?.waitingRoom || [],
+        roomId,
+      });
+
+      callback?.({ success: true, admitted });
     });
 
     // Leave room
@@ -251,6 +383,13 @@ function initSocketHandlers(io) {
 
     socket.on('disconnect', () => {
       console.log(`❌ Socket disconnected: ${socket.id}`);
+
+      // Unregister user→socket mapping
+      const user = socketUserMap.get(socket.id);
+      if (user) {
+        roomManager.unregisterUser(user.userId, socket.id);
+      }
+
       const disconnected = roomManager.handleDisconnect(socket.id);
       
       for (const { roomId, participant } of disconnected) {
